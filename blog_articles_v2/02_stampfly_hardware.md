@@ -649,73 +649,14 @@ DEBUG_PRINT_RATE("IMU OK", 1);
 
 ## 発展的内容（上級者向け）
 
-### ESP-NOWとコア配分の詳細
+### ESP-NOWとコア配分の重要な制約
 
-ESP-IDFでは、WiFi関連機能（ESP-NOWを含む）は**デフォルトでCore 0に割り当てられます**。これは重要な制約です：
+ESP-IDFでは、**ESP-NOWを含むWiFi機能は強制的にCore 0で実行**されます。このため：
 
-```cpp
-// ESP-IDFのWiFiタスク配置
-// WiFi関連タスク（ESP-NOW含む）はCore 0で実行される
-// これを考慮したタスク配分が必要
+- **Core 0**: ESP-NOW通信処理（ESP-IDFの制約）
+- **Core 1**: 400Hz制御演算（リアルタイム保証）
 
-class M5StampFlyHardwareAdvanced : public M5StampFlyHardware {
-private:
-    void createOptimizedTasks() {
-        // Core 0: WiFi/ESP-NOW + 軽量タスク
-        xTaskCreatePinnedToCore(
-            espNowAndMonitorTask,
-            "ESPNowMonitor",
-            4096,
-            this,
-            20,  // WiFiより低優先度
-            &espnow_task_handle_,
-            0    // Core 0（WiFiと同じ）
-        );
-        
-        // Core 1: 制御演算 + センサ処理（最適化版）
-        xTaskCreatePinnedToCore(
-            controlAndSensorTask,
-            "ControlSensor", 
-            8192,
-            this,
-            24,  // 最高優先度
-            &control_task_handle_,
-            1    // Core 1（制御専用）
-        );
-    }
-    
-    static void espNowAndMonitorTask(void* parameter) {
-        // ESP-NOW通信とシステムモニタリング
-        // WiFiタスクの合間に実行
-        while (1) {
-            // テレメトリ送信（10Hz程度）
-            sendTelemetry();
-            
-            // システム状態監視
-            monitorSystemHealth();
-            
-            vTaskDelay(pdMS_TO_TICKS(100));
-        }
-    }
-    
-    static void controlAndSensorTask(void* parameter) {
-        // Core 1で制御とセンサを統合処理
-        TickType_t last_wake_time = xTaskGetTickCount();
-        
-        while (1) {
-            // センサ読み取り（高速）
-            readSensorsOptimized();
-            
-            // 制御演算（400Hz）
-            executeControl();
-            
-            vTaskDelayUntil(&last_wake_time, pdMS_TO_TICKS(2.5));
-        }
-    }
-};
-```
-
-この配分により、WiFi通信による制御への影響を最小限に抑えています。
+この制約により、リアルタイム制御はCore 1に集約する設計が必須となります。
 
 ### 代替センサの選定
 
