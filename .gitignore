@@ -1,0 +1,41 @@
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+
+# Build artifacts
+build/
+dist/
+*.o
+*.bin
+*.elf
+
+# ESP-IDF specific
+sdkconfig
+sdkconfig.old
+build/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Documentation build
+docs/_build/
