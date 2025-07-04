@@ -595,16 +595,16 @@ ESP32-S3の2つのコアを効果的に使い分けることが、高速制御�
 複数のI2Cセンサを効率的に読み取るための工夫：
 
 ```cpp
-// バースト読み取りによる高速化
-esp_err_t readIMUBurst(uint8_t* data, size_t len) {
+// バースト読み取りによる高速化（BMP280気圧センサの例）
+esp_err_t readBarometerBurst(uint8_t* data, size_t len) {
     i2c_cmd_handle_t cmd = i2c_cmd_link_create();
     
     // レジスタアドレスを指定して連続読み取り
     i2c_master_start(cmd);
-    i2c_master_write_byte(cmd, (BMI270_ADDR << 1) | I2C_MASTER_WRITE, true);
-    i2c_master_write_byte(cmd, BMI270_DATA_REG, true);
+    i2c_master_write_byte(cmd, (BMP280_ADDR << 1) | I2C_MASTER_WRITE, true);
+    i2c_master_write_byte(cmd, BMP280_PRESS_DATA_REG, true);
     i2c_master_start(cmd);  // リピートスタート
-    i2c_master_write_byte(cmd, (BMI270_ADDR << 1) | I2C_MASTER_READ, true);
+    i2c_master_write_byte(cmd, (BMP280_ADDR << 1) | I2C_MASTER_READ, true);
     i2c_master_read(cmd, data, len, I2C_MASTER_LAST_NACK);
     i2c_master_stop(cmd);
     
