@@ -590,39 +590,6 @@ ESP32-S3の2つのコアを効果的に使い分けることが、高速制御�
 
 **重要**：ESP-IDFではWiFi機能（ESP-NOWを含む）がCore 0で動作するため、制御の主要部分はCore 1に集約する設計が必要です。これにより、通信による制御への影響を最小限に抑えられます。
 
-### I2C通信の最適化
-
-複数のI2Cセンサを効率的に読み取るための工夫：
-
-```cpp
-// バースト読み取りによる高速化（BMP280気圧センサの例）
-esp_err_t readBarometerBurst(uint8_t* data, size_t len) {
-    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
-    
-    // レジスタアドレスを指定して連続読み取り
-    i2c_master_start(cmd);
-    i2c_master_write_byte(cmd, (BMP280_ADDR << 1) | I2C_MASTER_WRITE, true);
-    i2c_master_write_byte(cmd, BMP280_PRESS_DATA_REG, true);
-    i2c_master_start(cmd);  // リピートスタート
-    i2c_master_write_byte(cmd, (BMP280_ADDR << 1) | I2C_MASTER_READ, true);
-    i2c_master_read(cmd, data, len, I2C_MASTER_LAST_NACK);
-    i2c_master_stop(cmd);
-    
-    esp_err_t ret = i2c_master_cmd_begin(I2C_NUM_0, cmd, pdMS_TO_TICKS(10));
-    i2c_cmd_link_delete(cmd);
-    
-    return ret;
-}
-```
-
-### PWM精度の確保
-
-ESCへの正確なPWM信号生成は、モータ制御の基本です：
-
-- **周波数**: 500Hz（一般的なESCの標準）
-- **分解能**: 11bit（2048段階）
-- **精度**: ±0.5μs以内
-
 ## よくある問題と対処法
 
 ### 初学者がつまずきやすいポイント
