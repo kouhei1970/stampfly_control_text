@@ -29,19 +29,19 @@
 ### **第2回: StampFlyハードウェア完全解説**
 **ファイル**: `02_stampfly_hardware.md`
 
-#### **プロンプト案A（分解図重視）**
+#### **プロンプト案A（分解図と仕様の融合）**
 ```
-"Create a 16:9 technical exploded view of M5StampFly components. Show ESP32-S3 board, sensors (BMI270, BMP280), motors, propellers floating in organized layers, with connection lines and labels, blueprint style background, blue technical drawing aesthetic, clean and professional"
-```
-
-#### **プロンプト案B（実物重視）**
-```
-"Design a 16:9 image featuring M5StampFly on a clean workbench with magnifying glass showing detailed circuit components, oscilloscope in background, technical documentation scattered around, warm maker space lighting, orange-blue color scheme"
+"Technical exploded view diagram of M5StampFly drone, isometric 3D illustration, floating components NO TEXT OR LABELS, ESP32-S3 chip highlighted, 9 sensors arranged in circular pattern, motor rotation indicators (CW/CCW arrows only), dark blue gradient background, orange accent colors, clean technical style, professional infographic design, no text, 16:9 aspect ratio"
 ```
 
-#### **プロンプト案C（システム統合重視）**
+#### **プロンプト案B（回路基板フォーカス）**
 ```
-"16:9 header showing M5StampFly at center with radiating connections to various sensors and components, each in detailed circular callouts, network/system diagram style, modern tech illustration, blue and orange accent colors"
+"Top-down view of M5StampFly PCB board with GPIO pin connections radiating outward to sensors and motors, technical circuit diagram style, NO TEXT OR LABELS, I2C and SPI bus visualization with colored lines, component placement diagram, dark background with glowing connection lines, orange and blue accent colors, 16:9 aspect ratio"
+```
+
+#### **プロンプト案C（センサ統合システム）**
+```
+"M5StampFly at center surrounded by 9 sensor components in circular arrangement (small circuit boards and sensor modules), each sensor with data flow visualization, weight scale showing 36.8g visually, oscilloscope showing 400Hz waveform, technical infographic style WITHOUT ANY TEXT, blue-orange gradient, visual elements only, 16:9 aspect ratio"
 ```
 
 ---
