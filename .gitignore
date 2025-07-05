@@ -39,3 +39,6 @@ __pycache__/
 
 # Documentation build
 docs/_build/
+
+# Project specific
+project_guidelines.md
