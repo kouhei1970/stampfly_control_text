@@ -410,63 +410,6 @@ void calculateMOSFETTemperature() {
 ※ 一般的な限界温度: 125℃
 ```
 
-#### 効率も考えてみよう
-
-PWM制御の効率は、モータに供給される電力と、MOSFETで失われる電力の比で決まります：
-
-```
-効率 = モータ電力 ÷ (モータ電力 + MOSFET損失) × 100%
-
-モータ電力 = 実効電圧 × 電流
-MOSFET損失 = 電流² × オン抵抗
-```
-
-重要なのは、**MOSFET損失は電流にのみ依存し、デューティ比には関係しない**ということです。つまり、デューティ比が高い（高電圧で駆動）ほど効率が良くなります。
-
-（注：これは導通損失のみを考慮した近似式です。実際にはスイッチング損失なども発生しますが、低速のPWM制御では導通損失が支配的なため、良い近似となります）
-
-実際に計算してみましょう：
-
-```cpp
-// デューティ比と効率の関係を表示
-void analyzePWMEfficiency() {
-    printf("=== PWM制御の効率 ===\n");
-    printf("デューティ[%%] | 実効電圧[V] | モータ電力[W] | 損失[W] | 効率[%%]\n");
-    printf("-----------|----------|------------|--------|--------\n");
-    
-    const float battery_voltage = 3.7f;
-    const float motor_current = 0.73f;  // ホバリング電流
-    const float rds_on = 0.1f;
-    
-    for (float duty = 0.3f; duty <= 1.0f; duty += 0.1f) {
-        float effective_voltage = battery_voltage * duty;
-        float motor_power = effective_voltage * motor_current;
-        float loss = motor_current * motor_current * rds_on;
-        float efficiency = motor_power / (motor_power + loss) * 100;
-        
-        printf("   %.0f    |   %.2f   |    %.2f    |  %.3f  |  %.1f\n",
-               duty * 100, effective_voltage, motor_power, loss, efficiency);
-    }
-}
-```
-
-実行結果：
-```
-=== PWM制御の効率 ===
-デューティ[%] | 実効電圧[V] | モータ電力[W] | 損失[W] | 効率[%]
------------|----------|------------|--------|--------
-   30    |   1.11   |    0.81    |  0.053  |  93.9
-   40    |   1.48   |    1.08    |  0.053  |  95.3
-   50    |   1.85   |    1.35    |  0.053  |  96.2
-   60    |   2.22   |    1.62    |  0.053  |  96.8
-   70    |   2.59   |    1.89    |  0.053  |  97.3
-   80    |   2.96   |    2.16    |  0.053  |  97.6
-   90    |   3.33   |    2.43    |  0.053  |  97.9
-  100    |   3.70   |    2.70    |  0.053  |  98.1
-```
-
-効率は93.9%〜98.1%と非常に高く、MOSFETドライバが効率的に動作していることがわかります。
-
 ### さらに考慮すべき実務的な要因
 
 実際の設計では、以下も検討が必要です：
