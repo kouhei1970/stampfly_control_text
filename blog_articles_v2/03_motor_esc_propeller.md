@@ -328,117 +328,125 @@ I = 2.9A時：発熱 ≈ 1.2W（許容範囲内）
 3. **安全性**：
 モータ保護とバッテリー過放電防止
 
-### 実際のMOSFET設計で考慮すべき要因
+### 実際の動作を想像してみましょう
 
-しかし、単一動作点の計算だけでは実用的な設計はできません：
+2.9Aまで制御できることがわかりました。でも、実際に飛行すると新たな疑問が生まれます：
 
-**実務で必要な設計検討：**
+**「ずっと最大電流を流し続けたら、熱くならない？」**
 
-1. **熱設計の詳細検討**
-   - 連続動作時の温度上昇予測
-   - 基板熱抵抗による放熱計算
-   - 周囲温度変化への対応
+実際に計算してみましょう。
 
-2. **効率最適化**
-   - スイッチング周波数の最適化
-   - ゲート駆動条件の調整
-   - デッドタイム設定
+#### MOSFETの発熱計算
 
-3. **EMI対策**
-   - スイッチングノイズの予測
-   - フィルタ設計
-   - 基板レイアウト最適化
+MOSFETには「オン抵抗」という特性があります。StampFlyのMOSFETは約0.1Ωです：
 
-**これらの計算を効率化するツール：**
-
-```cpp
-class MOSFETDriverDesign {
-public:
-    static constexpr struct {
-        float rds_on = 0.1f;              // [Ω] オン抵抗
-        float switching_frequency = 20e3f; // [Hz] PWM周波数
-        float rise_time = 50e-9f;         // [s] 立ち上がり時間
-        float thermal_resistance = 100.0f; // [℃/W] 熱抵抗
-    } mosfet_specs;
-    
-    // 動作条件全域での効率マップ生成
-    static void generateEfficiencyMap() {
-        printf("=== MOSFET効率マップ ===\n");
-        printf("電流[A] | デューティ | 効率[%%] | 発熱[W] | 温度上昇[℃]\n");
-        
-        for (float current = 0.5f; current <= 3.0f; current += 0.5f) {
-            for (float duty = 0.3f; duty <= 1.0f; duty += 0.2f) {
-                float efficiency = calculateEfficiency(current, duty);
-                float heat_loss = calculateHeatLoss(current, duty);
-                float temp_rise = heat_loss * mosfet_specs.thermal_resistance;
-                
-                printf("%6.1f  |   %4.1f    |  %5.1f  |  %5.2f  |    %5.1f\n",
-                       current, duty, efficiency * 100, heat_loss, temp_rise);
-            }
-        }
-    }
-    
-    // EMIノイズレベル予測
-    static float predictEMINoise(float current, float switching_frequency) {
-        // スイッチング時のdi/dt計算
-        float di_dt = current / mosfet_specs.rise_time;
-        
-        // 基本波のノイズレベル [dBμV] 経験式
-        float noise_level = 20 * log10(di_dt * 1e6) + 20 * log10(switching_frequency / 1e3);
-        
-        return noise_level;
-    }
-    
-    // 最適スイッチング周波数の決定
-    static float optimizeSwitchingFrequency(float target_efficiency, 
-                                          float max_noise_level) {
-        printf("=== スイッチング周波数最適化 ===\n");
-        
-        for (float freq = 10e3f; freq <= 100e3f; freq += 10e3f) {
-            float efficiency = calculateEfficiencyAtFreq(freq);
-            float noise = predictEMINoise(1.0f, freq);  // 1A基準
-            
-            printf("%.0fkHz: 効率%.1f%%, ノイズ%.1fdBμV", 
-                   freq/1000, efficiency*100, noise);
-            
-            if (efficiency >= target_efficiency && noise <= max_noise_level) {
-                printf(" ← 最適候補\n");
-                return freq;
-            } else {
-                printf("\n");
-            }
-        }
-        
-        return 20e3f;  // デフォルト値
-    }
-    
-private:
-    static float calculateEfficiency(float current, float duty) {
-        float conduction_loss = current * current * mosfet_specs.rds_on * duty;
-        float switching_loss = 0.5f * 3.7f * current * mosfet_specs.rise_time * 
-                              mosfet_specs.switching_frequency;
-        float output_power = 3.7f * current * duty;
-        
-        return output_power / (output_power + conduction_loss + switching_loss);
-    }
-    
-    static float calculateHeatLoss(float current, float duty) {
-        return current * current * mosfet_specs.rds_on * duty;
-    }
-    
-    static float calculateEfficiencyAtFreq(float frequency) {
-        // 周波数依存の効率計算（簡略版）
-        return 0.95f - (frequency - 20e3f) / 1e6f;  // 高周波で効率低下
-    }
-};
+```
+発熱 = 電流² × オン抵抗
+ホバリング時（0.73A）：0.73² × 0.1 = 0.053W
+最大時（2.9A）：2.9² × 0.1 = 0.84W
 ```
 
-**この設計ツールにより実現できること：**
+0.84Wの発熱は、小さなチップ部品にとってはかなりの熱量です。
 
-1. **熱設計の定量化**：温度上昇の事前予測
-2. **効率最適化**：動作条件に応じた最高効率点の特定
-3. **EMI予測**：設計段階でのノイズレベル評価
-4. **最適化自動化**：多目的最適化による設計解探索
+### 温度上昇を見積もる簡単なツール
+
+実際にどれくらい温度が上がるか計算してみましょう：
+
+```cpp
+// MOSFETの温度上昇を計算
+void calculateMOSFETTemperature() {
+    // MOSFETの基本仕様
+    const float rds_on = 0.1f;           // オン抵抗[Ω]
+    const float thermal_resistance = 100.0f;  // 熱抵抗[℃/W]（基板込み）
+    const float ambient_temp = 25.0f;    // 周囲温度[℃]
+    
+    printf("=== MOSFET温度解析 ===\n");
+    printf("電流[A] | 発熱[W] | 温度上昇[℃] | チップ温度[℃]\n");
+    printf("-------|---------|------------|-------------\n");
+    
+    // 代表的な動作点での温度計算
+    float currents[] = {0.73f, 1.0f, 1.5f, 2.0f, 2.9f};
+    
+    for (int i = 0; i < 5; i++) {
+        float current = currents[i];
+        float power_loss = current * current * rds_on;
+        float temp_rise = power_loss * thermal_resistance;
+        float chip_temp = ambient_temp + temp_rise;
+        
+        printf(" %.2f  |  %.3f  |    %.1f    |    %.1f\n",
+               current, power_loss, temp_rise, chip_temp);
+    }
+    
+    printf("\n※ 一般的な限界温度: 125℃\n");
+}
+```
+
+実行結果：
+```
+=== MOSFET温度解析 ===
+電流[A] | 発熱[W] | 温度上昇[℃] | チップ温度[℃]
+-------|---------|------------|-------------
+ 0.73  |  0.053  |    5.3    |    30.3
+ 1.00  |  0.100  |   10.0    |    35.0
+ 1.50  |  0.225  |   22.5    |    47.5
+ 2.00  |  0.400  |   40.0    |    65.0
+ 2.90  |  0.841  |   84.1    |   109.1
+
+※ 一般的な限界温度: 125℃
+```
+
+#### 効率も考えてみよう
+
+PWM制御では、デューティ比によって効率が変わります：
+
+```cpp
+// デューティ比と効率の関係を表示
+void analyzePWMEfficiency() {
+    printf("=== PWM制御の効率 ===\n");
+    printf("デューティ[%%] | 実効電圧[V] | モータ電力[W] | 損失[W] | 効率[%%]\n");
+    printf("-----------|----------|------------|--------|--------\n");
+    
+    const float battery_voltage = 3.7f;
+    const float motor_current = 0.73f;  // ホバリング電流
+    const float rds_on = 0.1f;
+    
+    for (float duty = 0.3f; duty <= 1.0f; duty += 0.1f) {
+        float effective_voltage = battery_voltage * duty;
+        float motor_power = effective_voltage * motor_current;
+        float loss = motor_current * motor_current * rds_on;
+        float efficiency = motor_power / (motor_power + loss) * 100;
+        
+        printf("   %.0f    |   %.2f   |    %.2f    |  %.3f  |  %.1f\n",
+               duty * 100, effective_voltage, motor_power, loss, efficiency);
+    }
+}
+```
+
+### さらに考慮すべき実務的な要因
+
+実際の設計では、以下も検討が必要です：
+
+1. **連続動作時の熱蓄積**
+   - 4つのMOSFETが同時に発熱
+   - 基板全体の温度上昇
+
+2. **PWM周波数の選択**
+   - 高周波：効率は良いがノイズが増加
+   - 低周波：モータの音が聞こえる
+
+3. **保護機能の実装**
+   - 過電流保護
+   - 温度保護
+
+### 設計の妥当性確認
+
+今回の計算から：
+- ホバリング時（0.73A）：30℃程度で全く問題なし
+- 最大電流時（2.9A）：109℃で限界に近いが短時間なら許容範囲
+
+つまり、2.9A制限は熱的にも妥当な設計値であることが確認できました。
+
+**このような簡単な計算でも、設計の良し悪しを判断する重要な情報が得られます。**
 
 ## プロペラ設計と空力特性
 
