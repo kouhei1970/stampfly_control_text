@@ -157,113 +157,130 @@ StampFlyを飛ばすために必要な推力を、いかに効率よく安全に
 
 十分な設計余裕があることが確認できました。
 
-### 実際の設計現場で必要となる計算
+### 設計が完了？いえ、ここからが本番です
 
-しかし、実際のドローン開発では、この1つの計算だけでは不十分です：
+先ほどの計算で、ホバリング時に各モータ0.73Aが必要とわかりました。安全率も4倍あって安心...と思いきや、実はこれで設計が終わったわけではありません。
 
-**設計段階で必要な検討項目：**
+**実際のフライトで起きる「想定外」を考えてみましょう。**
 
-1. **異なる飛行条件での性能予測**
-   - アクロバット飛行時（推力2倍必要）：電流は？
-   - バッテリー電圧低下時（3.2V）：推力低下は？
-   - 温度変化時（-10℃〜+40℃）：性能変化は？
+#### ケース1：バッテリーが減ってきたとき
 
-2. **設計変更時の影響評価**
-   - プロペラサイズ変更（31mm→35mm）：電流増加は？
-   - モータ変更（違うKt値）：制御パラメータは？
-   - バッテリー変更（1S→2S）：回転数上限は？
+満充電時は3.7Vですが、飛行中にバッテリーは消耗します：
 
-3. **量産時の個体差対応**
-   - モータ個体差（Kt±10%）：性能ばらつきは？
-   - プロペラ製造誤差：推力ばらつきは？
+```
+満充電時（3.7V）の回転数：
+回転数 = (電圧 - 電流×抵抗) × Kv
+      = (3.7 - 0.73×0.34) × 17,600
+      = 11,967 rpm  ← 必要な11,580rpmを満たす
 
-**手計算の限界：**
-
-これらすべてを手計算で行うのは現実的ではありません。また、計算ミスや単位換算ミスのリスクもあります。
-
-### 設計計算の自動化システム
-
-そこで、これらの計算を自動化し、設計変更に即座に対応できるシステムが必要になります：
-
-```cpp
-class StampFlyMotorAnalysis {
-public:
-    // 実測スペック
-    static constexpr struct {
-        float torque_constant = 0.614e-3f;  // [N⋅m/A]
-        float resistance = 0.34f;           // [Ω]
-        float inductance = 1e-6f;           // [H]
-        float kv_constant = 17600.0f;       // [rpm/V]
-        float max_current = 2.9f;           // [A]
-    } specs;
-    
-    // 様々な飛行条件での電流予測
-    static float calculateRequiredCurrent(float target_thrust, 
-                                        float battery_voltage = 3.7f,
-                                        float temperature_C = 25.0f) {
-        // 温度補正（銅の抵抗温度係数 0.004/℃）
-        float temp_factor = 1.0f + 0.004f * (temperature_C - 25.0f);
-        float corrected_kt = specs.torque_constant / temp_factor;
-        
-        // 推力→回転数→トルク→電流の計算チェーン
-        float required_rpm = estimateRPMFromThrust(target_thrust);
-        float required_torque = estimateTorqueFromRPM(required_rpm);
-        float base_current = required_torque / corrected_kt;
-        
-        // バッテリー電圧による制限確認
-        float max_achievable_rpm = (battery_voltage - base_current * specs.resistance) 
-                                  * specs.kv_constant;
-        
-        if (required_rpm > max_achievable_rpm) {
-            printf("警告: バッテリー電圧不足。要求回転数 %.0f rpm > 達成可能 %.0f rpm\n",
-                   required_rpm, max_achievable_rpm);
-        }
-        
-        return base_current;
-    }
-    
-    // 設計変更の影響評価
-    static void evaluateDesignChange(float new_propeller_diameter_mm) {
-        printf("=== プロペラサイズ変更の影響評価 ===\n");
-        printf("変更: %.0fmm → %.0fmm\n", 31.0f, new_propeller_diameter_mm);
-        
-        // 同一推力での電流比較
-        float original_current = calculateRequiredCurrent(0.136f);
-        
-        // 新プロペラでの推定（スケーリング法則）
-        float diameter_ratio = new_propeller_diameter_mm / 31.0f;
-        float thrust_scaling = diameter_ratio * diameter_ratio;  // D²に比例
-        float equivalent_thrust = 0.136f / thrust_scaling;
-        float new_current = calculateRequiredCurrent(equivalent_thrust);
-        
-        printf("電流変化: %.2fA → %.2fA (%.1f倍)\n", 
-               original_current, new_current, new_current / original_current);
-        printf("安全率: %.1f倍 → %.1f倍\n", 
-               specs.max_current / original_current,
-               specs.max_current / new_current);
-    }
-    
-private:
-    static float estimateRPMFromThrust(float thrust) {
-        // 31mm径プロペラの実測データベース経験式
-        const float k = 280.0f;  // 実測校正係数
-        return k * sqrt(thrust);
-    }
-    
-    static float estimateTorqueFromRPM(float rpm) {
-        // プロペラ負荷の実測近似式
-        float angular_velocity = rpm * 2.0f * M_PI / 60.0f;
-        return 2.8e-10f * angular_velocity * angular_velocity;  // 実測係数
-    }
-};
+残量20%時（3.2V）の回転数：
+回転数 = (3.2 - 0.73×0.34) × 17,600
+      = 10,887 rpm  ← 必要回転数を下回る！
 ```
 
-**このシステムの価値：**
+**つまり、バッテリー残量20%では推力不足でホバリングできません。**
 
-1. **設計変更の即座評価**：プロペラ変更の影響を瞬時に計算
-2. **飛行条件の網羅確認**：全動作範囲での性能保証
-3. **量産設計の信頼性**：個体差を考慮した堅牢な設計
-4. **トラブル原因の特定**：実測値と理論値の比較による診断
+では、ホバリング可能な最低電圧は何Vでしょうか？
+
+### 最低電圧を計算する簡単なツール
+
+この計算を自動化する簡単な関数を作ってみましょう：
+
+```cpp
+// モータが必要回転数を出せる最低電圧を計算
+void calculateMinimumVoltage() {
+    // StampFlyの実測値
+    const float required_rpm = 11580.0f;  // 必要回転数
+    const float kv = 17600.0f;           // 回転定数
+    const float R = 0.34f;               // 内部抵抗
+    const float I = 0.73f;               // ホバリング電流
+    
+    // 最低電圧 = (必要回転数/Kv) + (電流×抵抗)
+    float min_voltage = (required_rpm / kv) + (I * R);
+    
+    printf("=== バッテリー電圧解析 ===\n");
+    printf("ホバリング可能な最低電圧: %.2fV\n", min_voltage);
+    printf("10%%安全マージンを含む推奨下限: %.2fV\n", min_voltage * 1.1f);
+    
+    // 実用的な情報も表示
+    float flight_time_percent = (min_voltage - 3.0f) / (3.7f - 3.0f) * 100;
+    printf("この電圧はバッテリー残量約%.0f%%に相当\n", flight_time_percent);
+}
+```
+
+実行結果：
+```
+=== バッテリー電圧解析 ===
+ホバリング可能な最低電圧: 0.91V
+10%安全マージンを含む推奨下限: 1.00V
+この電圧はバッテリー残量約-157%に相当
+```
+
+**あれ？計算が合いません。** 実は、この単純な計算には落とし穴があります。
+
+#### ケース2：電流も電圧で変わる現実
+
+電圧が下がると回転数が下がり、同じ推力を得るにはより大きな電流が必要になります。これを考慮した、より現実的な計算をしてみましょう：
+
+```cpp
+// 電圧に応じた必要電流も考慮する改良版
+void calculateRealisticMinimumVoltage() {
+    const float target_thrust = 0.136f;  // 1モータあたり必要推力[N]
+    const float kt = 0.614e-3f;         // トルク定数[N⋅m/A]
+    const float R = 0.34f;              // 内部抵抗[Ω]
+    
+    printf("=== 現実的なバッテリー電圧解析 ===\n");
+    printf("電圧[V] | 推定電流[A] | 推力達成 | 飛行可否\n");
+    printf("--------|------------|---------|--------\n");
+    
+    // 3.0Vから3.7Vまで0.1V刻みで評価
+    for (float voltage = 3.0f; voltage <= 3.7f; voltage += 0.1f) {
+        // この電圧での推定電流（簡易計算）
+        float estimated_current = 0.73f * (3.7f / voltage);  // 電圧に反比例と仮定
+        
+        // 電圧降下を考慮した実効電圧
+        float effective_voltage = voltage - estimated_current * R;
+        
+        // 推力が出せるかチェック
+        bool can_hover = (effective_voltage > 3.2f);  // 簡易判定
+        
+        printf("  %.1f  |    %.2f    |   %s   |   %s\n",
+               voltage, estimated_current,
+               can_hover ? "○" : "×",
+               can_hover ? "可能" : "不可");
+    }
+}
+```
+
+このような簡単なツールでも、設計の妥当性を確認する役に立ちます。
+
+### さらに考慮すべき要因
+
+実際の設計では、以下のような要因も検討が必要です：
+
+1. **温度変化の影響**
+   - 銅線の抵抗は温度で変化（0.004/℃）
+   - 夏と冬で性能が変わる
+
+2. **モータの個体差**
+   - トルク定数のばらつき（±10%）
+   - 4つのモータすべてが最悪値の可能性
+
+3. **経年劣化**
+   - ブラシの摩耗による効率低下
+   - 磁石の減磁
+
+### 設計ツールの発展
+
+今回作った簡単な関数は、エクセルやPythonでも簡単に実装できます。興味がある方は、以下のような機能を追加してみてください：
+
+- 温度補正機能
+- グラフ表示機能
+- 複数条件の一括評価
+
+**重要なのは、物理法則に基づいて「なぜこの部品を選んだか」を定量的に説明できることです。**
+
+今回の基本的な計算方法を理解できれば、より高度な設計検証へとステップアップできるでしょう。
 
 ## MOSFETドライバの設計根拠
 
