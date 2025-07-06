@@ -221,17 +221,10 @@ ESP32-S3 (3.3V PWM) → MOSFETドライバ → パワーMOSFET → ブラシモ�
 ```cpp
 class MOSFETDriverAnalysis {
 public:
-    // PWM信号の電力増幅
-    static float calculatePowerAmplification(float pwm_duty, 
-                                           float supply_voltage) {
-        // PWM実効電圧の計算
-        float effective_voltage = supply_voltage * pwm_duty;
-        
-        // 電力増幅率（理論値）
-        float voltage_gain = supply_voltage / 3.3f;  // ESP32-S3の出力電圧
-        float power_gain = voltage_gain * voltage_gain;
-        
-        return power_gain;
+    // PWM実効電圧の計算
+    static float calculateEffectiveVoltage(float pwm_duty, float supply_voltage) {
+        // PWMデューティ比から実効電圧を計算
+        return supply_voltage * pwm_duty;
     }
     
     // スイッチング損失の計算
@@ -240,8 +233,10 @@ public:
                                        float fall_time,
                                        float voltage,
                                        float current) {
-        float transition_time = (rise_time + fall_time) / 2.0f;
-        float loss_per_cycle = 0.5f * voltage * current * transition_time;
+        // オン時とオフ時の遷移損失をそれぞれ計算
+        float turn_on_loss = 0.5f * voltage * current * rise_time;   // オン遷移損失
+        float turn_off_loss = 0.5f * voltage * current * fall_time;  // オフ遷移損失
+        float loss_per_cycle = turn_on_loss + turn_off_loss;         // 1周期あたりの損失
         return loss_per_cycle * switching_frequency;
     }
 };
@@ -251,11 +246,19 @@ public:
 
 MOSFETドライバの動作を解析するクラスです：
 
-- **`calculatePowerAmplification`関数**：**重要な注意**：MOSFETは電力増幅器ではなく**電力スイッチ**です。この関数は、ESP32-S3の3.3V制御信号が、3.7Vバッテリー電力をPWM制御する際の**制御可能電力範囲**を計算します。MOSFETは「開閉スイッチ」として動作し、PWMデューティ比で平均電力を制御します。
+- **`calculateEffectiveVoltage`関数**：PWMデューティ比から実効電圧を計算します。MOSFETは**電力スイッチ**として動作し、オン・オフの時間比率（デューティ比）によってモータに供給される平均電圧を制御します。
 
-- **PWMによる電力制御の原理**：例えば50%デューティのPWM信号では、モータには時間的に「3.7V（オン時）→ 0V（オフ時）」が繰り返され、平均的には1.85V相当の電力が供給されます。
+- **PWMによる電力制御の原理**：例えば50%デューティのPWM信号では、モータには時間的に「3.7V（オン時）→ 0V（オフ時）」が繰り返され、平均的には1.85V相当の電圧が供給されます。これは電力の**増幅**ではなく、既存のバッテリー電力の**時分割制御**です。
 
-- **`calculateSwitchingLoss`関数**：MOSFETがオン・オフを切り替える瞬間に発生する電力損失を計算します。理想的なスイッチでは損失ゼロですが、実際には切り替え時間中に電圧と電流が同時に存在するため損失が発生します。
+- **`calculateSwitchingLoss`関数**：MOSFETがオン・オフを切り替える瞬間に発生する電力損失を計算します。
+
+**スイッチング損失の物理的原理**：
+  - **オン遷移**：MOSFETがオフ→オンに切り替わる際、電圧が下がりながら電流が上昇
+  - **オフ遷移**：MOSFETがオン→オフに切り替わる際、電流が下がりながら電圧が上昇
+  - **損失計算**：各遷移で電圧×電流×時間/2の三角形状の電力損失が発生
+  - **0.5倍の理由**：遷移時間中、電圧または電流が線形変化するため平均値は最大値の1/2
+
+理想的なスイッチでは瞬間的に切り替わり損失ゼロですが、実際には遷移時間中に電圧と電流が同時に存在するため損失が発生します。
 
 ### 電力変換効率と発熱特性
 
@@ -979,7 +982,7 @@ private:
 ### 今回学んだ重要なポイント
 
 1. **ブラシモータの教育的価値**：複雑な電子制御を避けて物理現象に集中
-2. **MOSFETドライバの効率**：90%超の高効率でPWM信号を電力増幅
+2. **MOSFETドライバの効率**：90%超の高効率でPWM信号による電力スイッチング
 3. **プロペラの空気力学**：推力係数とトルク係数による性能評価
 4. **システム統合の課題**：振動、発熱、効率のトレードオフ
 
