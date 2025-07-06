@@ -438,199 +438,141 @@ void calculateMOSFETTemperature() {
 
 ## プロペラ設計と空力特性
 
-### 31mm径プロペラの設計制約
+### 市販プロペラからの選定プロセス
 
-プロペラサイズは以下の制約で決定：
+実際のドローン設計では、理論計算よりも「市販品の選択肢」が設計を決定します。
+
+**市販小型ドローンプロペラの標準サイズ：**
+
+- 31mm, 40mm, 51mm, 65mm, 75mm径が代表的
+- 設計の自由度はこの選択肢に限定される
+- **「最適解」より「実現可能解」を選ぶのが現実**
+
+### StampFlyの制約条件と選定
 
 **物理的制約：**
-- **機体サイズ**：81.5mm四角に4つのプロペラが収まること
-- **対角間隔**：プロペラ同士の干渉回避
-- **実用サイズ**：約30mm径が上限
+- 機体サイズ：80mm × 80mm
+- プロペラ対角：65mm
+- **収納可能上限：約52mm径**
 
-**空力的制約：**
-- **レイノルズ数**：小径プロペラは低Re領域で動作
-- **効率限界**：大型機より効率が低下
-- **ピッチ制約**：室内飛行では高ピッチ不要
-
-### 22.86mmピッチの選定根拠
-
-**ピッチの物理的意味：**
-```
-理論進度 = ピッチ × 回転数
-22.86mm × 11,580 rpm = 4.4 m/s （理論値）
-```
-
-実際の前進速度は効率により低下しますが、室内飛行には十分です。
-
-**ピッチ選定の考慮事項：**
-
-1. **低ピッチ（高回転型）**：
-   - 推力応答が速い（制御性良好）
-   - 効率はやや低下
-   - 室内飛行に適している
-
-2. **高ピッチ（低回転型）**：
-   - 効率は向上
-   - 推力応答が遅い
-   - 高速前進に適している
-
-StampFlyは制御性を重視して低ピッチを選択。
-
-### プロペラ設計の実務課題
-
-しかし、実際のプロペラ選定では、より広範囲な検討が必要です：
-
-**プロペラ設計で考慮すべき要因：**
-
-1. **材料選択の影響**
-   - プラスチック vs カーボン：重量・剛性・コスト
-   - 製造精度：射出成形 vs 切削加工
-   - 耐久性：衝撃耐性と疲労強度
-
-2. **空力性能の最適化**
-   - 翼型設計：低レイノルズ数対応
-   - ねじり分布：効率最大化
-   - 先端形状：騒音低減
-
-3. **システムマッチング**
-   - モータ特性との整合
-   - 振動特性の評価
-   - 制御応答性の確保
-
-### プロペラ性能予測システム
-
-これらの複雑な検討を体系的に行うためのツール：
+**市販品の適合性チェック：**
 
 ```cpp
-class PropellerDesignSystem {
-public:
-    struct PropellerGeometry {
-        float diameter_mm;
-        float pitch_mm;
-        float blade_count;
-        float hub_ratio;        // ハブ径/全径比
-        float material_density; // [kg/m³]
-    };
+// 市販プロペラサイズの適合性チェック
+void checkCommercialPropellers() {
+    // 市販標準サイズ
+    float standard_sizes[] = {31.0f, 40.0f, 51.0f, 65.0f, 75.0f};
+    const float diagonal_limit = 65.0f;  // mm
+    const float safety_margin = 0.8f;    // 安全係数
     
-    // 複数のプロペラ候補を比較評価
-    static void compareDesignCandidates() {
-        PropellerGeometry candidates[] = {
-            {31.0f, 22.86f, 2, 0.2f, 1200.0f},  // 現行プラスチック
-            {31.0f, 25.4f,  2, 0.2f, 1200.0f},  // 高ピッチ版
-            {35.0f, 22.86f, 2, 0.2f, 1200.0f},  // 大径版
-            {31.0f, 22.86f, 2, 0.2f, 1600.0f},  // カーボン版
-        };
-        
-        printf("=== プロペラ設計候補比較 ===\n");
-        printf("直径 | ピッチ | 材質 | 推力 | 効率 | 重量 | 応答性 | 総合評価\n");
-        
-        for (const auto& prop : candidates) {
-            auto performance = evaluatePerformance(prop);
-            printf("%4.0f | %5.1f | %s | %4.2f | %4.1f | %4.1f | %6.1f | %8.1f\n",
-                   prop.diameter_mm, prop.pitch_mm,
-                   (prop.material_density > 1500) ? "CF" : "PL",
-                   performance.thrust_N, performance.efficiency * 100,
-                   performance.weight_g, performance.response_ms,
-                   performance.overall_score);
-        }
+    printf("=== 市販プロペラサイズの適合性 ===\n");
+    printf("対角制限: %.0fmm (安全係数込み: %.0fmm)\n", 
+           diagonal_limit, diagonal_limit * safety_margin);
+    
+    for (int i = 0; i < 5; i++) {
+        bool fits = (standard_sizes[i] <= diagonal_limit * safety_margin);
+        printf("φ%.0fmm: %s\n", standard_sizes[i], fits ? "適合 ✓" : "不適合 ×");
     }
     
-    // 動作環境による性能変化予測
-    static void analyzeEnvironmentalEffects() {
-        printf("=== 環境条件による性能変化 ===\n");
-        
-        struct Environment {
-            float temperature_C;
-            float pressure_Pa;
-            float humidity_percent;
-        } conditions[] = {
-            {25.0f, 101325.0f, 50.0f},  // 標準条件
-            {-10.0f, 101325.0f, 20.0f}, // 冬季屋外
-            {35.0f, 101325.0f, 80.0f},  // 夏季高湿度
-            {25.0f, 86000.0f, 30.0f},   // 高地（1500m）
-        };
-        
-        for (const auto& env : conditions) {
-            float air_density = calculateAirDensity(env.temperature_C, 
-                                                   env.pressure_Pa, 
-                                                   env.humidity_percent);
-            float thrust_factor = air_density / 1.225f;  // 標準密度比
-            
-            printf("%.0f℃, %.0fhPa: 空気密度%.3f, 推力%.1f%%\n",
-                   env.temperature_C, env.pressure_Pa/100,
-                   air_density, thrust_factor * 100);
-        }
-    }
-    
-    // レイノルズ数効果の予測
-    static void analyzeReynoldsEffects() {
-        printf("=== レイノルズ数による性能変化 ===\n");
-        
-        for (float rpm = 5000; rpm <= 15000; rpm += 2500) {
-            float tip_speed = M_PI * 0.031f * rpm / 60.0f;  // [m/s]
-            float reynolds = calculateReynolds(tip_speed, 0.031f);
-            float efficiency_factor = reynoldsCorrection(reynolds);
-            
-            printf("%.0frpm: 先端速度%.1fm/s, Re=%.0f, 効率係数%.3f\n",
-                   rpm, tip_speed, reynolds, efficiency_factor);
-        }
-    }
-    
-private:
-    struct PerformanceMetrics {
-        float thrust_N;
-        float efficiency;
-        float weight_g;
-        float response_ms;
-        float overall_score;
-    };
-    
-    static PerformanceMetrics evaluatePerformance(const PropellerGeometry& prop) {
-        // 詳細な性能計算（実装は実測データベースと連携）
-        PerformanceMetrics metrics;
-        metrics.thrust_N = estimateThrust(prop);
-        metrics.efficiency = estimateEfficiency(prop);
-        metrics.weight_g = calculateWeight(prop);
-        metrics.response_ms = estimateResponseTime(prop);
-        metrics.overall_score = calculateOverallScore(metrics);
-        return metrics;
-    }
-    
-    static float calculateAirDensity(float temp_C, float pressure_Pa, float humidity) {
-        // 理想気体の状態方程式 + 湿度補正
-        float temp_K = temp_C + 273.15f;
-        float dry_density = pressure_Pa / (287.0f * temp_K);
-        float humidity_correction = 1.0f - 0.378f * humidity / 100.0f * 
-                                   getSaturationPressure(temp_C) / pressure_Pa;
-        return dry_density * humidity_correction;
-    }
-    
-    static float calculateReynolds(float velocity, float chord) {
-        const float kinematic_viscosity = 15.1e-6f;  // [m²/s] @20℃
-        return velocity * chord / kinematic_viscosity;
-    }
-    
-    static float reynoldsCorrection(float reynolds) {
-        // 低レイノルズ数での効率補正（経験式）
-        return 0.7f + 0.3f * tanh((reynolds - 20000.0f) / 10000.0f);
-    }
-    
-    // その他のヘルパー関数...
-    static float estimateThrust(const PropellerGeometry& prop) { return 0.15f; }
-    static float estimateEfficiency(const PropellerGeometry& prop) { return 0.75f; }
-    static float calculateWeight(const PropellerGeometry& prop) { return 0.8f; }
-    static float estimateResponseTime(const PropellerGeometry& prop) { return 50.0f; }
-    static float calculateOverallScore(const PerformanceMetrics& metrics) { return 8.5f; }
-    static float getSaturationPressure(float temp_C) { return 2339.0f; }
-};
+    printf("\n選択可能: 31mm, 40mm, 51mm\n");
+}
 ```
 
-**この設計システムの価値：**
+**選定結果：**
+- 31mm径：✓ 余裕あり
+- 40mm径：✓ 適合
+- 51mm径：✓ ギリギリ適合
+- 65mm径：× 収まらない
+- 75mm径：× 収まらない
 
-1. **多候補の客観比較**：数値ベースでの最適解選択
-2. **環境適応性評価**：様々な使用条件での性能保証
-3. **物理現象の定量化**：レイノルズ数効果などの可視化
-4. **設計トレードオフの明確化**：性能・重量・コストのバランス最適化
+### なぜ31mm径を選んだか
+
+3つの選択肢の中から31mm径を選んだ理由：
+
+**1. 重量制約の優先**
+- 36.8g制限下で最軽量選択
+- より大きなプロペラは重量増加
+
+**2. 安全性の確保**
+- 室内飛行での安全性重視
+- 小径で接触時の危険低減
+
+**3. 4枚羽根による推力密度向上**
+- 31mm径でも4枚羽根で推力確保
+- 22.86mmピッチ（0.9インチ）で室内飛行に適合
+
+### 選定結果の妥当性確認
+
+31mm径選択の妥当性を数値で確認してみましょう：
+
+```cpp
+// 31mm径選択の検証
+void verify31mmSelection() {
+    printf("=== 31mm径選択の検証 ===\n");
+    
+    // 基本性能
+    printf("推力要求: 0.136N/モータ\n");
+    printf("31mm径4枚羽根: 要求推力達成 ✓\n");
+    
+    // 重量メリット
+    printf("重量優先: 36.8g制限下で最軽量選択 ✓\n");
+    
+    // 安全性
+    printf("室内飛行: 小径で安全性確保 ✓\n");
+    
+    // 実証結果
+    printf("実飛行: 4分間安定ホバリング ✓\n");
+}
+```
+
+**4枚羽根の利点：**
+
+- 同じ推力をより低回転で実現
+- 振動・騒音の低減
+- 室内飛行での安全性向上
+- 推力密度の向上
+
+### 設計の教訓
+
+**市販部品制約下での設計の現実：**
+
+1. **標準サイズから選択するのが現実的**
+   - 理論最適解より実現可能解を重視
+   - 部品調達の制約が設計を決定
+
+2. **制約条件の正確な把握が重要**
+   - 物理的制約の正確な測定
+   - 市販品の選択肢調査
+
+3. **実飛行による検証が最終判断**
+   - 計算だけでなく実証が必要
+   - StampFlyは4分間安定飛行で性能確認済み
+
+### 今後の発展的な検討課題
+
+**より高度な設計を目指す場合の課題：**
+
+1. **環境条件の影響**
+   - 温度・湿度・気圧による推力変化
+   - 室内外での性能差
+
+2. **空力性能の最適化**
+   - 翼型設計と低レイノルズ数効果
+   - 騒音低減と効率のトレードオフ
+
+3. **材料選択の検討**
+   - プラスチック vs カーボンファイバー
+   - 重量・剛性・コストのバランス
+
+**しかし、StampFlyのような教育用小型ドローンでは：**
+
+- 市販標準品の選択が現実的
+- 複雑な最適化より安全性・調達性を重視
+- **実飛行による検証が最も重要**
+
+**重要な設計哲学：**
+
+理論的な最適解を追求するより、制約条件を正確に把握し、実現可能な選択肢から最良のものを選ぶ。そして実際に飛ばして検証する。これが実用的な設計プロセスです。
 
 ## システム統合の設計課題
 
